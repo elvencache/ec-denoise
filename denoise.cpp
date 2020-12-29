@@ -238,7 +238,7 @@ public:
 		s_velocity = bgfx::createUniform("s_velocity", bgfx::UniformType::Sampler); // Velocity gbuffer
 		s_previous = bgfx::createUniform("s_previous", bgfx::UniformType::Sampler); // Previous frame's result
 		s_albedo = bgfx::createUniform("s_albedo",   bgfx::UniformType::Sampler); // Model's source albedo
-		s_normalPrev = bgfx::createUniform("s_normalPrev", bgfx::UniformType::Sampler); // Previous frame's gbuffer normal
+		s_normalPrevious = bgfx::createUniform("s_normalPrevious", bgfx::UniformType::Sampler); // Previous frame's gbuffer normal
 
 		// Create program from shaders.
 		m_gbufferProgram = loadProgram("vs_denoise_gbuffer", "fs_denoise_gbuffer"); // Fill gbuffer
@@ -330,7 +330,7 @@ public:
 		bgfx::destroy(s_velocity);
 		bgfx::destroy(s_previous);
 		bgfx::destroy(s_albedo);
-		bgfx::destroy(s_normalPrev);
+		bgfx::destroy(s_normalPrevious);
 
 		destroyFramebuffers();
 
@@ -468,7 +468,7 @@ public:
 				bgfx::setTexture(1, s_normal, m_gbufferTex[GBUFFER_RT_NORMAL]);
 				bgfx::setTexture(2, s_velocity, m_gbufferTex[GBUFFER_RT_VELOCITY]);
 				bgfx::setTexture(3, s_previous, m_denoisePrevious.m_texture);
-				bgfx::setTexture(4, s_normalPrev, m_normalPrevious.m_texture);
+				bgfx::setTexture(4, s_normalPrevious, m_normalPrevious.m_texture);
 
 				m_uniforms.submit();
 				screenSpaceQuad(float(m_width), float(m_height), m_texelHalf, caps->originBottomLeft);
@@ -942,7 +942,7 @@ public:
 	bgfx::UniformHandle s_depth;
 	bgfx::UniformHandle s_previous;
 	bgfx::UniformHandle s_albedo;
-	bgfx::UniformHandle s_normalPrev;
+	bgfx::UniformHandle s_normalPrevious;
 
 	bgfx::FrameBufferHandle m_gbuffer;
 	bgfx::TextureHandle m_gbufferTex[GBUFFER_RENDER_TARGETS];
