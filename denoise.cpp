@@ -88,7 +88,7 @@ struct Uniforms
 			/*  2    */ struct { float m_ndcToViewMul[2]; float m_ndcToViewAdd[2]; };
 			/*  3    */ struct { float m_cameraJitterCurr[2]; float m_cameraJitterPrev[2]; };
 			/*  4    */ struct { float m_feedbackMin; float m_feedbackMax; float m_unused4[2]; };
-			/*  5    */ struct { float m_applyJitterDelta; float m_applyMitchellFilter; float m_options[2]; };
+			/*  5    */ struct { float m_unused5; float m_applyMitchellFilter; float m_options[2]; };
 			/*  6-9  */ struct { float m_worldToViewPrev[16]; };
 			/* 10-13 */ struct { float m_viewToProjPrev[16]; };
 			/* 14    */ struct { float m_frameOffsetForNoise; float m_noiseType; float m_unused14[2]; };
@@ -709,7 +709,6 @@ public:
 			if (ImGui::CollapsingHeader("TXAA options"))
 			{
 				ImGui::Checkbox("Enable TXAA", &m_enableTxaa);
-				ImGui::Checkbox("jitterDelta", &m_applyJitterDelta);
 				ImGui::Checkbox("mitchellFilter", &m_applyMitchellFilter);
 				ImGui::Separator();
 			}
@@ -893,7 +892,6 @@ public:
 			m_jitter[1] = jitterY;
 		}
 
-		m_uniforms.m_applyJitterDelta = m_applyJitterDelta ? 1.0f : 0.0f;
 		m_uniforms.m_applyMitchellFilter = m_applyMitchellFilter ? 1.0f : 0.0f;
 
 		mat4Set(m_uniforms.m_worldToViewPrev, m_worldToViewPrev);
@@ -973,8 +971,7 @@ public:
 
 	// UI
 	bool m_enableTxaa = false;
-	bool m_applyJitterDelta = false;
-	bool m_applyMitchellFilter = false;
+	bool m_applyMitchellFilter = true;
 	int32_t m_noiseType = 2;
 	bool m_dynamicNoise = true;
 	bool m_useTemporalPass = true;

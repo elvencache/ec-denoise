@@ -10,7 +10,6 @@ uniform vec4 u_params[16];
 
 #define u_jitterCurr				(u_params[3].xy)
 #define u_jitterPrev				(u_params[3].zw)
-#define u_applyJitterDelta			(u_params[5].x)
 #define u_applyMitchellFilter		(u_params[5].y)
 
 #define u_worldToViewPrev0			(u_params[6])

@@ -166,58 +166,30 @@ void main()
 	float c = 1.0/3.0;//-1.0/4.0;//
 #endif
 
-#if 1
-	float m0 = Mitchell(b, c, 0.0);
-	float m1 = Mitchell(b, c, 1.0);
-	float m2 = Mitchell(b, c, sqrt(2.0));
-	vec3 colorFilter = m0 * colorCurr;
-	colorFilter += m1 * colorLe;
-	colorFilter += m1 * colorRi;
-	colorFilter += m1 * colorUp;
-	colorFilter += m1 * colorDo;
-	colorFilter += m2 * colorUL;
-	colorFilter += m2 * colorUR;
-	colorFilter += m2 * colorDL;
-	colorFilter += m2 * colorDR;
-	colorFilter *= 1.0/(m0 + 4.0*m1 + 4.0*m2);
-#else
-	vec2 coords[9] = {
-		vec2(-1.0, -1.0),
-		vec2( 0.0, -1.0),
-		vec2( 1.0, -1.0),
-		vec2( 1.0,  0.0),
-		vec2( 0.0,  0.0),
-		vec2(-1.0,  0.0),
-		vec2(-1.0,  1.0),
-		vec2( 0.0,  1.0),
-		vec2( 1.0,  1.0)
-	};
-	float w[9];
-	float weights = 0.0;
-	for (uint i = 0; i < 9; ++i) {
-		float ww = Mitchell(b, c, length(coords[i] - u_jitterCurr));
-		w[i] = ww;
-		weights += ww;
-	}
-	vec3 colorFilter = w[0] * colorUL;
-	colorFilter += w[1] * colorUp;
-	colorFilter += w[2] * colorUR;
-	colorFilter += w[3] * colorRi;
-	colorFilter += w[4] * colorCurr;
-	colorFilter += w[5] * colorLe;
-	colorFilter += w[6] * colorDL;
-	colorFilter += w[7] * colorDo;
-	colorFilter += w[8] * colorDR;
-	colorFilter *= 1.0/weights;
-#endif
-
 	if (u_applyMitchellFilter > 0.0) {
+		float m0 = Mitchell(b, c, 0.0);
+		float m1 = Mitchell(b, c, 1.0);
+		float m2 = Mitchell(b, c, sqrt(2.0));
+		vec3 colorFilter = m0 * colorCurr;
+		colorFilter += m1 * colorLe;
+		colorFilter += m1 * colorRi;
+		colorFilter += m1 * colorUp;
+		colorFilter += m1 * colorDo;
+		colorFilter += m2 * colorUL;
+		colorFilter += m2 * colorUR;
+		colorFilter += m2 * colorDL;
+		colorFilter += m2 * colorDR;
+		colorFilter *= 1.0/(m0 + 4.0*m1 + 4.0*m2);
+
 		colorOut = mix(colorFilter, colorPrev, feedback);
 	}
 
 #if APPLY_TXAA_IN_LINEAR
 	colorCurr = toGamma(colorOut);
+#else
+	colorCurr = colorOut;
 #endif
+
 
 #if DEBUG_HALF_SCREEN
 	}

@@ -28,7 +28,7 @@ void main()
 
 	// offset to last pixel
 	vec2 velocity = texture2D(s_velocity, texCoord).xy;
-	vec2 texCoordPrev = GetTexCoordPrevious(texCoord, velocity);
+	vec2 texCoordPrev = GetTexCoordPreviousNoJitter(texCoord, velocity);
 
 	// SVGF approach suggests sampling and test/rejecting 4 contributing
 	// samples individually and then doing custom bilinear filter of result
