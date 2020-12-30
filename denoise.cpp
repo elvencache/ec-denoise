@@ -232,23 +232,23 @@ public:
 		m_uniforms.init();
 
 		// Create texture sampler uniforms (used when we bind textures)
-		s_normal = bgfx::createUniform("s_normal",   bgfx::UniformType::Sampler); // Normal gbuffer
-		s_depth = bgfx::createUniform("s_depth",    bgfx::UniformType::Sampler); // Depth gbuffer
-		s_color = bgfx::createUniform("s_color",    bgfx::UniformType::Sampler); // Color (albedo) gbuffer
+		s_albedo = bgfx::createUniform("s_albedo", bgfx::UniformType::Sampler); // Model's source albedo
+		s_color = bgfx::createUniform("s_color", bgfx::UniformType::Sampler); // Color (albedo) gbuffer, default color input
+		s_normal = bgfx::createUniform("s_normal", bgfx::UniformType::Sampler); // Normal gbuffer, Model's source normal
 		s_velocity = bgfx::createUniform("s_velocity", bgfx::UniformType::Sampler); // Velocity gbuffer
-		s_previous = bgfx::createUniform("s_previous", bgfx::UniformType::Sampler); // Previous frame's result
-		s_albedo = bgfx::createUniform("s_albedo",   bgfx::UniformType::Sampler); // Model's source albedo
-		s_normalPrevious = bgfx::createUniform("s_normalPrevious", bgfx::UniformType::Sampler); // Previous frame's gbuffer normal
+		s_depth = bgfx::createUniform("s_depth", bgfx::UniformType::Sampler); // Depth gbuffer
+		s_previousColor = bgfx::createUniform("s_previousColor", bgfx::UniformType::Sampler); // Previous frame's result
+		s_previousNormal = bgfx::createUniform("s_previousNormal", bgfx::UniformType::Sampler); // Previous frame's gbuffer normal
 
 		// Create program from shaders.
 		m_gbufferProgram = loadProgram("vs_denoise_gbuffer", "fs_denoise_gbuffer"); // Fill gbuffer
-		m_combineProgram = loadProgram("vs_denoise_screenquad", "fs_denoise_deferred_combine");
-		m_txaaProgram = loadProgram("vs_denoise_screenquad", "fs_denoise_txaa");
-		m_copyProgram = loadProgram("vs_denoise_screenquad", "fs_denoise_copy");
+		m_combineProgram = loadProgram("vs_denoise_screenquad", "fs_denoise_deferred_combine"); // Compute lighting from gbuffer
+		m_copyProgram = loadProgram("vs_denoise_screenquad", "fs_denoise_copy"); 
 		m_denoiseTemporalProgram = loadProgram("vs_denoise_screenquad", "fs_denoise_temporal");
 		m_denoiseSpatialProgram3x3 = loadProgram("vs_denoise_screenquad", "fs_denoise_spatial_3x3");
 		m_denoiseSpatialProgram5x5 = loadProgram("vs_denoise_screenquad", "fs_denoise_spatial_5x5");
 		m_denoiseApplyLighting = loadProgram("vs_denoise_screenquad", "fs_denoise_apply_lighting");
+		m_txaaProgram = loadProgram("vs_denoise_screenquad", "fs_denoise_txaa");
 
 		// Load some meshes
 		for (uint32_t ii = 0; ii < BX_COUNTOF(s_meshPaths); ++ii)
@@ -268,7 +268,7 @@ public:
 			model.position[2] = (((mwc.gen() % 256)) - 128.0f) / 20.0f;
 		}
 
-		// Load ground. We'll just use the cube
+		// Load ground, just use the cube
 		m_ground = meshLoad("meshes/cube.bin");
 
 		m_groundTexture = loadTexture("textures/fieldstone-rgba.dds");
@@ -315,22 +315,22 @@ public:
 
 		bgfx::destroy(m_gbufferProgram);
 		bgfx::destroy(m_combineProgram);
-		bgfx::destroy(m_txaaProgram);
 		bgfx::destroy(m_copyProgram);
 		bgfx::destroy(m_denoiseTemporalProgram);
 		bgfx::destroy(m_denoiseSpatialProgram3x3);
 		bgfx::destroy(m_denoiseSpatialProgram5x5);
 		bgfx::destroy(m_denoiseApplyLighting);
+		bgfx::destroy(m_txaaProgram);
 
 		m_uniforms.destroy();
 
-		bgfx::destroy(s_normal);
-		bgfx::destroy(s_depth);
-		bgfx::destroy(s_color);
-		bgfx::destroy(s_velocity);
-		bgfx::destroy(s_previous);
 		bgfx::destroy(s_albedo);
-		bgfx::destroy(s_normalPrevious);
+		bgfx::destroy(s_color);
+		bgfx::destroy(s_normal);
+		bgfx::destroy(s_velocity);
+		bgfx::destroy(s_depth);
+		bgfx::destroy(s_previousColor);
+		bgfx::destroy(s_previousNormal);
 
 		destroyFramebuffers();
 
@@ -432,7 +432,7 @@ public:
 
 				bgfx::setViewRect(view, 0, 0, uint16_t(m_width), uint16_t(m_height));
 				bgfx::setViewTransform(view, NULL, orthoProj);
-				bgfx::setViewFrameBuffer(view, m_colorCurrent.m_buffer);
+				bgfx::setViewFrameBuffer(view, m_currentColor.m_buffer);
 				bgfx::setState(0
 					| BGFX_STATE_WRITE_RGB
 					| BGFX_STATE_WRITE_A
@@ -447,7 +447,7 @@ public:
 			}
 
 			// update last texture written, to chain passes together
-			bgfx::TextureHandle lastTex = m_colorCurrent.m_texture;
+			bgfx::TextureHandle lastTex = m_currentColor.m_texture;
 			
 
 			// denoise temporal pass
@@ -457,7 +457,7 @@ public:
 
 				bgfx::setViewRect(view, 0, 0, uint16_t(m_width), uint16_t(m_height));
 				bgfx::setViewTransform(view, NULL, orthoProj);
-				bgfx::setViewFrameBuffer(view, m_colorExtra.m_buffer);
+				bgfx::setViewFrameBuffer(view, m_temporaryColor.m_buffer);
 				bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_DEPTH_TEST_ALWAYS);
 
 				// want color, prevColor
@@ -467,15 +467,15 @@ public:
 				bgfx::setTexture(0, s_color, lastTex);
 				bgfx::setTexture(1, s_normal, m_gbufferTex[GBUFFER_RT_NORMAL]);
 				bgfx::setTexture(2, s_velocity, m_gbufferTex[GBUFFER_RT_VELOCITY]);
-				bgfx::setTexture(3, s_previous, m_denoisePrevious.m_texture);
-				bgfx::setTexture(4, s_normalPrevious, m_normalPrevious.m_texture);
+				bgfx::setTexture(3, s_previousColor, m_previousDenoise.m_texture);
+				bgfx::setTexture(4, s_previousNormal, m_previousNormal.m_texture);
 
 				m_uniforms.submit();
 				screenSpaceQuad(float(m_width), float(m_height), m_texelHalf, caps->originBottomLeft);
 				bgfx::submit(view, m_denoiseTemporalProgram);
 				++view;
 
-				lastTex = m_colorExtra.m_texture;
+				lastTex = m_temporaryColor.m_texture;
 			}
 			
 			// denoise spatial passes
@@ -483,12 +483,12 @@ public:
 			{
 				// variable number of passes for denoise, alternate between two textures/buffers
 				bgfx::FrameBufferHandle destBuffer[DENOISE_MAX_PASSES] = {
-					m_denoisePrevious.m_buffer,
-					m_colorCurrent.m_buffer,
-					m_colorExtra.m_buffer,
-					m_colorCurrent.m_buffer,
-					m_colorExtra.m_buffer,
-					m_colorCurrent.m_buffer
+					m_previousDenoise.m_buffer,
+					m_currentColor.m_buffer,
+					m_temporaryColor.m_buffer,
+					m_currentColor.m_buffer,
+					m_temporaryColor.m_buffer,
+					m_currentColor.m_buffer
 				};
 				
 				uint32_t denoisePasses = bx::min(DENOISE_MAX_PASSES, m_denoisePasses);
@@ -517,17 +517,17 @@ public:
 					bgfx::submit(view, spatialProgram);
 					++view;
 
-					if (m_denoisePrevious.m_buffer.idx == destBuffer[i].idx)
+					if (m_previousDenoise.m_buffer.idx == destBuffer[i].idx)
 					{
-						lastTex = m_denoisePrevious.m_texture;
+						lastTex = m_previousDenoise.m_texture;
 					}
-					else if (m_colorExtra.m_buffer.idx == destBuffer[i].idx)
+					else if (m_temporaryColor.m_buffer.idx == destBuffer[i].idx)
 					{
-						lastTex = m_colorExtra.m_texture;
+						lastTex = m_temporaryColor.m_texture;
 					}
 					else
 					{
-						lastTex = m_colorCurrent.m_texture;
+						lastTex = m_currentColor.m_texture;
 					}
 				}
 			}
@@ -538,7 +538,7 @@ public:
 				bgfx::setViewName(view, "copy color for temporal denoise");
 				bgfx::setViewRect(view, 0, 0, uint16_t(m_width), uint16_t(m_height));
 				bgfx::setViewTransform(view, NULL, orthoProj);
-				bgfx::setViewFrameBuffer(view, m_denoisePrevious.m_buffer);
+				bgfx::setViewFrameBuffer(view, m_previousDenoise.m_buffer);
 				bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_DEPTH_TEST_ALWAYS);
 				bgfx::setTexture(0, s_color, lastTex);
 				screenSpaceQuad(float(m_width), float(m_height), m_texelHalf, caps->originBottomLeft);
@@ -553,9 +553,9 @@ public:
 				bgfx::setViewRect(view, 0, 0, uint16_t(m_width), uint16_t(m_height));
 				bgfx::setViewTransform(view, NULL, orthoProj);
 
-				bgfx::FrameBufferHandle destBuffer = (lastTex.idx == m_colorCurrent.m_texture.idx)
-					? m_colorExtra.m_buffer
-					: m_colorCurrent.m_buffer;
+				bgfx::FrameBufferHandle destBuffer = (lastTex.idx == m_currentColor.m_texture.idx)
+					? m_temporaryColor.m_buffer
+					: m_currentColor.m_buffer;
 				bgfx::setViewFrameBuffer(view, destBuffer);
 				bgfx::setState(0
 					| BGFX_STATE_WRITE_RGB
@@ -568,9 +568,9 @@ public:
 				screenSpaceQuad(float(m_width), float(m_height), m_texelHalf, caps->originBottomLeft);
 				bgfx::submit(view, m_denoiseApplyLighting);
 				++view;
-				lastTex = (m_colorExtra.m_buffer.idx == destBuffer.idx)
-					? m_colorExtra.m_texture
-					: m_colorCurrent.m_texture;
+				lastTex = (m_temporaryColor.m_buffer.idx == destBuffer.idx)
+					? m_temporaryColor.m_texture
+					: m_currentColor.m_texture;
 			}
 
 			if (m_enableTxaa)
@@ -581,14 +581,14 @@ public:
 
 					bgfx::setViewRect(view, 0, 0, uint16_t(m_width), uint16_t(m_height));
 					bgfx::setViewTransform(view, NULL, orthoProj);
-					bgfx::setViewFrameBuffer(view, m_colorTxaa.m_buffer);
+					bgfx::setViewFrameBuffer(view, m_txaaColor.m_buffer);
 					bgfx::setState(0
 						| BGFX_STATE_WRITE_RGB
 						| BGFX_STATE_WRITE_A
 						| BGFX_STATE_DEPTH_TEST_ALWAYS
 						);
 					bgfx::setTexture(0, s_color, lastTex);
-					bgfx::setTexture(1, s_previous, m_colorPrevious.m_texture);
+					bgfx::setTexture(1, s_previousColor, m_previousColor.m_texture);
 					bgfx::setTexture(2, s_velocity, m_gbufferTex[GBUFFER_RT_VELOCITY]);
 					bgfx::setTexture(3, s_depth, m_gbufferTex[GBUFFER_RT_DEPTH]);
 					m_uniforms.submit();
@@ -603,13 +603,13 @@ public:
 
 					bgfx::setViewRect(view, 0, 0, uint16_t(m_width), uint16_t(m_height));
 					bgfx::setViewTransform(view, NULL, orthoProj);
-					bgfx::setViewFrameBuffer(view, m_colorPrevious.m_buffer);
+					bgfx::setViewFrameBuffer(view, m_previousColor.m_buffer);
 					bgfx::setState(0
 						| BGFX_STATE_WRITE_RGB
 						| BGFX_STATE_WRITE_A
 						| BGFX_STATE_DEPTH_TEST_ALWAYS
 						);
-					bgfx::setTexture(0, s_color, m_colorTxaa.m_texture);
+					bgfx::setTexture(0, s_color, m_txaaColor.m_texture);
 					screenSpaceQuad(float(m_width), float(m_height), m_texelHalf, caps->originBottomLeft);
 					bgfx::submit(view, m_copyProgram);
 					++view;
@@ -627,7 +627,7 @@ public:
 						| BGFX_STATE_WRITE_A
 						| BGFX_STATE_DEPTH_TEST_ALWAYS
 						);
-					bgfx::setTexture(0, s_color, m_colorTxaa.m_texture);
+					bgfx::setTexture(0, s_color, m_txaaColor.m_texture);
 					screenSpaceQuad(float(m_width), float(m_height), m_texelHalf, caps->originBottomLeft);
 					bgfx::submit(view, m_copyProgram);
 					++view;
@@ -664,7 +664,7 @@ public:
 				bgfx::setViewName(view, "copy normals");
 				bgfx::setViewRect(view, 0, 0, uint16_t(m_width), uint16_t(m_height));
 				bgfx::setViewTransform(view, NULL, orthoProj);
-				bgfx::setViewFrameBuffer(view, m_normalPrevious.m_buffer);
+				bgfx::setViewFrameBuffer(view, m_previousNormal.m_buffer);
 				bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_DEPTH_TEST_ALWAYS);
 				bgfx::setTexture(0, s_color, m_gbufferTex[GBUFFER_RT_NORMAL]);
 				screenSpaceQuad(float(m_width), float(m_height), m_texelHalf, caps->originBottomLeft);
@@ -816,12 +816,12 @@ public:
 		m_gbufferTex[GBUFFER_RT_DEPTH]    = bgfx::createTexture2D(uint16_t(m_size[0]), uint16_t(m_size[1]), false, 1, bgfx::TextureFormat::D24, pointSampleFlags);
 		m_gbuffer = bgfx::createFrameBuffer(BX_COUNTOF(m_gbufferTex), m_gbufferTex, true);
 
-		m_colorCurrent.init(m_size[0], m_size[1], bgfx::TextureFormat::RG11B10F, bilinearFlags);
-		m_colorPrevious.init(m_size[0], m_size[1], bgfx::TextureFormat::RG11B10F, bilinearFlags);
-		m_colorTxaa.init(m_size[0], m_size[1], bgfx::TextureFormat::RG11B10F, bilinearFlags);
-		m_colorExtra.init(m_size[0], m_size[1], bgfx::TextureFormat::RG11B10F, bilinearFlags);
-		m_normalPrevious.init(m_size[0], m_size[1], bgfx::TextureFormat::RG11B10F, pointSampleFlags);
-		m_denoisePrevious.init(m_size[0], m_size[1], bgfx::TextureFormat::RG11B10F, bilinearFlags);
+		m_currentColor.init(m_size[0], m_size[1], bgfx::TextureFormat::RG11B10F, bilinearFlags);
+		m_previousColor.init(m_size[0], m_size[1], bgfx::TextureFormat::RG11B10F, bilinearFlags);
+		m_txaaColor.init(m_size[0], m_size[1], bgfx::TextureFormat::RG11B10F, bilinearFlags);
+		m_temporaryColor.init(m_size[0], m_size[1], bgfx::TextureFormat::RG11B10F, bilinearFlags);
+		m_previousNormal.init(m_size[0], m_size[1], bgfx::TextureFormat::RG11B10F, pointSampleFlags);
+		m_previousDenoise.init(m_size[0], m_size[1], bgfx::TextureFormat::RG11B10F, bilinearFlags);
 	}
 
 	// all buffers set to destroy their textures
@@ -829,12 +829,12 @@ public:
 	{
 		bgfx::destroy(m_gbuffer);
 
-		m_colorCurrent.destroy();
-		m_colorPrevious.destroy();
-		m_colorTxaa.destroy();
-		m_colorExtra.destroy();
-		m_normalPrevious.destroy();
-		m_denoisePrevious.destroy();
+		m_currentColor.destroy();
+		m_previousColor.destroy();
+		m_txaaColor.destroy();
+		m_temporaryColor.destroy();
+		m_previousNormal.destroy();
+		m_previousDenoise.destroy();
 	}
 
 	void updateUniforms()
@@ -843,7 +843,7 @@ public:
 
 		float depthLinearizeMul = -m_proj2[3*4+2]; // float depthLinearizeMul = ( clipFar * clipNear ) / ( clipFar - clipNear );
 		float depthLinearizeAdd =  m_proj2[2*4+2]; // float dpethLinearizeAdd = clipFar / ( clipFar - clipNear );
-											       // "correct the handedness issue. need to make sure this below is correct, but I think it is."
+												   // "correct the handedness issue. need to make sure this below is correct, but I think it is."
 		if (depthLinearizeMul * depthLinearizeAdd < 0)
 		{
 			depthLinearizeAdd = -depthLinearizeAdd;
@@ -897,9 +897,6 @@ public:
 		mat4Set(m_uniforms.m_worldToViewPrev, m_worldToViewPrev);
 		mat4Set(m_uniforms.m_viewToProjPrev, m_viewToProjPrev);
 
-		//
-		// denoise uniforms
-
 		m_uniforms.m_frameOffsetForNoise = m_dynamicNoise
 			? float(m_currFrame % 8)
 			: 0.0f;
@@ -916,41 +913,37 @@ public:
 
 	entry::MouseState m_mouseState;
 
-	Uniforms m_uniforms;
-
 	// Resource handles
 	bgfx::ProgramHandle m_gbufferProgram;
 	bgfx::ProgramHandle m_combineProgram;
-	bgfx::ProgramHandle m_txaaProgram;
 	bgfx::ProgramHandle m_copyProgram;
+	bgfx::ProgramHandle m_denoiseTemporalProgram;
 	bgfx::ProgramHandle m_denoiseSpatialProgram3x3;
 	bgfx::ProgramHandle m_denoiseSpatialProgram5x5;
-	bgfx::ProgramHandle m_denoiseTemporalProgram;
 	bgfx::ProgramHandle m_denoiseApplyLighting;
-
-	bgfx::FrameBufferHandle m_copyBuffer;
+	bgfx::ProgramHandle m_txaaProgram;
 
 	// Shader uniforms
-	bgfx::UniformHandle u_params;
+	Uniforms m_uniforms;
 
 	// Uniforms to indentify texture samplers
-	bgfx::UniformHandle s_normal;  
+	bgfx::UniformHandle s_albedo;
 	bgfx::UniformHandle s_color;
+	bgfx::UniformHandle s_normal;
 	bgfx::UniformHandle s_velocity;
 	bgfx::UniformHandle s_depth;
-	bgfx::UniformHandle s_previous;
-	bgfx::UniformHandle s_albedo;
-	bgfx::UniformHandle s_normalPrevious;
+	bgfx::UniformHandle s_previousColor;
+	bgfx::UniformHandle s_previousNormal;
 
 	bgfx::FrameBufferHandle m_gbuffer;
 	bgfx::TextureHandle m_gbufferTex[GBUFFER_RENDER_TARGETS];
 
-	RenderTarget m_colorCurrent;
-	RenderTarget m_colorPrevious;
-	RenderTarget m_colorTxaa;
-	RenderTarget m_colorExtra;
-	RenderTarget m_normalPrevious;
-	RenderTarget m_denoisePrevious; // color output by first spatial denoise pass, input to next frame as prevColor
+	RenderTarget m_currentColor;
+	RenderTarget m_previousColor;
+	RenderTarget m_txaaColor;
+	RenderTarget m_temporaryColor; // need another buffer to ping-pong results
+	RenderTarget m_previousNormal;
+	RenderTarget m_previousDenoise; // color output by first spatial denoise pass, input to next frame as previous color
 
 	struct Model
 	{
@@ -961,29 +954,14 @@ public:
 	Model m_models[MODEL_COUNT];
 	Mesh* m_meshes[BX_COUNTOF(s_meshPaths)];
 	Mesh* m_ground;
-
-	
-	
 	bgfx::TextureHandle m_groundTexture;
 	bgfx::TextureHandle m_normalTexture;
 
 	uint32_t m_currFrame;
-
-	// UI
-	bool m_enableTxaa = false;
-	bool m_applyMitchellFilter = true;
-	int32_t m_noiseType = 2;
-	bool m_dynamicNoise = true;
-	bool m_useTemporalPass = true;
-	int32_t m_spatialSampleType = 1;
-	int32_t m_denoisePasses = 5;
-	float m_sigmaDepth = 0.1f;
-	float m_sigmaNormal = 128.0f;
-
 	float m_texelHalf = 0.0f;
 	float m_fovY = 60.0f;
-
-	bool m_recreateFrameBuffers;
+	bool m_recreateFrameBuffers = false;
+	bool m_havePrevious = false;
 
 	float m_view[16];
 	float m_proj[16];
@@ -993,7 +971,16 @@ public:
 	float m_jitter[2];
 	int32_t m_size[2];
 
-	bool m_havePrevious = false;
+	// UI parameters
+	bool m_enableTxaa = false;
+	bool m_applyMitchellFilter = true;
+	int32_t m_noiseType = 2;
+	bool m_dynamicNoise = true;
+	bool m_useTemporalPass = true;
+	int32_t m_spatialSampleType = 1;
+	int32_t m_denoisePasses = 5;
+	float m_sigmaDepth = 0.1f;
+	float m_sigmaNormal = 128.0f;
 };
 
 } // namespace

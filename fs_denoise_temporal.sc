@@ -13,8 +13,8 @@ $input v_texcoord0
 SAMPLER2D(s_color,			0);
 SAMPLER2D(s_normal,			1);
 SAMPLER2D(s_velocity,		2);
-SAMPLER2D(s_previous,		3); // previous color
-SAMPLER2D(s_normalPrevious,	4); // previous normal
+SAMPLER2D(s_previousColor,		3); // previous color
+SAMPLER2D(s_previousNormal,	4); // previous normal
 
 #define COS_PI_OVER_4   0.70710678118
 
@@ -70,11 +70,11 @@ void main()
 	float accumulatedWeight = 0.0;
 	for (uint i = 0; i < 4; ++i)
 	{
-		vec3 sampleNormal = NormalDecode(texture2D(s_normalPrevious, coords[i]).xyz);
+		vec3 sampleNormal = NormalDecode(texture2D(s_previousNormal, coords[i]).xyz);
 		float normalSimilarity = dot(normal, sampleNormal);
 		float weight = (normalSimilarity < COS_PI_OVER_4) ? 0.0 : 1.0;
 
-		vec4 sampleColor = texture2D(s_previous, coords[i]);
+		vec4 sampleColor = texture2D(s_previousColor, coords[i]);
 
 		weight *= coordWeights[i];
 		accumulatedColor += sampleColor * weight;

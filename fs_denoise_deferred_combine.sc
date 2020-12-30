@@ -22,16 +22,16 @@ void main()
 
     // mess with result so there's something to denosie
     float sn = 1.0;
-    if (1.5 < kNoiseType)
+    if (1.5 < u_noiseType)
     {
-        sn = ShadertoyNoise(gl_FragCoord.xy + vec2(314.0, 159.0)*kFrameIdx);
+        sn = ShadertoyNoise(gl_FragCoord.xy + vec2(314.0, 159.0)*u_frameIdx);
         sn = (sn < 0.5) ? 0.0 : 1.0;
     }
-    else if (0.5 < kNoiseType)
+    else if (0.5 < u_noiseType)
     {
         uint2 coord2x2 = uint2(gl_FragCoord.xy) % 2;
         uint frameSelect = coord2x2.y * 2 + coord2x2.x;
-        uint frameMod4 = uint(kFrameIdx) % 4;
+        uint frameMod4 = uint(u_frameIdx) % 4;
         sn = (frameSelect == frameMod4) ? 1.0 : 0.0;
     }
     

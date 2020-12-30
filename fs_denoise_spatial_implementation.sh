@@ -25,8 +25,8 @@ void main()
     // want depth gradient for edge stopping function
     float depthGradient = abs(dFdx(depth)) + abs(dFdy(depth));
     
-    float du = kTexCoordStep * u_viewTexel.x;
-    float dv = kTexCoordStep * u_viewTexel.y;
+    float du = u_texCoordStep * u_viewTexel.x;
+    float dv = u_texCoordStep * u_viewTexel.y;
 
 #if USE_SPATIAL_5X5
     float gaussianWeights[5];
@@ -73,11 +73,11 @@ void main()
 
             vec4 sampleColor = texture2D(s_color, sampleTexCoord);
             vec3 sampleNormal = NormalDecode(texture2D(s_normal, sampleTexCoord).xyz);
-            float normalWeight = pow(saturate(dot(normal, sampleNormal)), kSigmaNormal);
+            float normalWeight = pow(saturate(dot(normal, sampleNormal)), u_sigmaNormal);
             
             float sampleDepth = texture2D(s_depth, sampleTexCoord).x;
             float depthDelta = depth - sampleDepth;
-            float depthWeight = exp(-abs(depthDelta) / max(1e-5, kSigmaDepth*kSigmaDepth));
+            float depthWeight = exp(-abs(depthDelta) / max(1e-5, u_sigmaDepth*u_sigmaDepth));
 
             float weight = depthWeight * normalWeight;
 

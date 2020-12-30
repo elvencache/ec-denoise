@@ -21,10 +21,10 @@ uniform vec4 u_params[16];
 #define u_viewToProjPrev2			(u_params[12])
 #define u_viewToProjPrev3			(u_params[13])
 
-#define kFrameIdx					(u_params[14].x)
-#define kNoiseType					(u_params[14].y) // 0=none, 1=dither, 2=random
-#define kTexCoordStep				(u_params[15].x)
-#define kSigmaDepth					(u_params[15].y)
-#define kSigmaNormal				(u_params[15].z)
+#define u_frameIdx					(u_params[14].x)
+#define u_noiseType					(u_params[14].y) // 0=none, 1=dither, 2=random
+#define u_texCoordStep				(u_params[15].x)
+#define u_sigmaDepth				(u_params[15].y)
+#define u_sigmaNormal				(u_params[15].z)
 
 #endif // PARAMETERS_SH
