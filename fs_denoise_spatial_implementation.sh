@@ -34,16 +34,16 @@ void main()
     gaussianWeights[1] = 4.0/16.0;
     gaussianWeights[2] = 6.0/16.0;
     gaussianWeights[3] = 4.0/16.0;
-    gaussianWeights[4] = 1.0/16.0;     
+    gaussianWeights[4] = 1.0/16.0;
     float initialWeight = (gaussianWeights[2]*gaussianWeights[2]);
-    uint indexOffset = 2;    
-    
+    int centerIdx = 2;
+
     vec4 accumulateColor = color * initialWeight;
     float accumulateWeight = initialWeight;
 
-    for (int yy = -2; yy < 3; ++yy)
+    for (int yy = 0; yy < 5; ++yy)
     {
-        for (int xx = -2; xx < 3; ++xx)
+        for (int xx = 0; xx < 5; ++xx)
         {
 #else
     float gaussianWeights[3];
@@ -51,22 +51,22 @@ void main()
     gaussianWeights[1] = 2.0/4.0;
     gaussianWeights[2] = 1.0/4.0;
     float initialWeight = (gaussianWeights[1]*gaussianWeights[1]);
-    uint indexOffset = 1;
-    
+    int centerIdx = 1;
+
     vec4 accumulateColor = color * initialWeight;
     float accumulateWeight = initialWeight;
 
-    for (int yy = -1; yy < 2; ++yy)
+    for (int yy = 0; yy < 3; ++yy)
     {
-        for (int xx = -1; xx < 2; ++xx)
+        for (int xx = 0; xx < 3; ++xx)
         {
 #endif // USE_SPATIAL_5X5
-            if ((0 == xx) && (0 == yy)) {
+            if ((centerIdx == xx) && (centerIdx == yy)) {
                 continue;
             }
-            
-            float xOffset = float(xx);
-            float yOffset = float(yy);
+
+            float xOffset = float(xx) - float(centerIdx);
+            float yOffset = float(yy) - float(centerIdx);
             vec2 sampleTexCoord = texCoord;
             sampleTexCoord.x += xOffset * du;
             sampleTexCoord.y += yOffset * dv;
@@ -82,9 +82,7 @@ void main()
             float weight = depthWeight * normalWeight;
 
             // apply gaussian
-            uint xIdx = xx + indexOffset;
-            uint yIdx = yy + indexOffset;
-            weight *= (gaussianWeights[xIdx]*gaussianWeights[yIdx]);
+            weight *= (gaussianWeights[xx]*gaussianWeights[yy]);
 
             accumulateColor += sampleColor * weight;
             accumulateWeight += weight;

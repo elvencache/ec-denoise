@@ -68,7 +68,7 @@ void main()
 
 	vec4 accumulatedColor = vec4_splat(0.0);
 	float accumulatedWeight = 0.0;
-	for (uint i = 0; i < 4; ++i)
+	for (int i = 0; i < 4; ++i)
 	{
 		vec3 sampleNormal = NormalDecode(texture2D(s_previousNormal, coords[i]).xyz);
 		float normalSimilarity = dot(normal, sampleNormal);
