@@ -22,7 +22,7 @@ namespace {
 #define GBUFFER_RT_DEPTH		3
 #define GBUFFER_RENDER_TARGETS	4
 
-#define MODEL_COUNT	100
+#define MODEL_COUNT				100
 
 static const char * s_meshPaths[] =
 {
@@ -697,7 +697,7 @@ public:
 				, ImGuiCond_FirstUseEver
 				);
 			ImGui::SetNextWindowSize(
-				ImVec2(m_width / 4.0f, m_height / 1.3f)
+				ImVec2(m_width / 4.0f, m_height / 1.36f)
 				, ImGuiCond_FirstUseEver
 				);
 			ImGui::Begin("Settings"
@@ -706,25 +706,76 @@ public:
 				);
 
 			ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.5f);
-			if (ImGui::CollapsingHeader("TXAA options"))
+
 			{
-				ImGui::Checkbox("Enable TXAA", &m_enableTxaa);
-				ImGui::Checkbox("mitchellFilter", &m_applyMitchellFilter);
+				ImGui::TextWrapped(
+					"In this demo, noise is added to results of deferred lighting. Then denoise "
+					"is applied before multiplying the lit result with gbuffer albedo. Optionally, "
+					"temporal antialiasing can be applied after that. (txaa off by default. "
+					"it is rather blurry)");
+				ImGui::Separator();
+
+				ImGui::Text("noise controls:");
+				ImGui::Combo("pattern", &m_noiseType, "none\0dither\0random\0\0");
+				if (ImGui::IsItemHovered())
+				{
+					ImGui::BeginTooltip();
+					ImGui::Text("none");
+					ImGui::BulletText("compare denoised results to this");
+					ImGui::BulletText("brighter than noisy images, not losing any pixel's energy");
+					ImGui::Text("dither");
+					ImGui::BulletText("reject 3 out of 4 pixels in 2x2 pattern");
+					ImGui::BulletText("could represent lower resolution signal");
+					ImGui::Text("random");
+					ImGui::BulletText("reject about half pixels, using common shader random");
+					ImGui::BulletText("could represent monte carlo something or other");
+					ImGui::EndTooltip();
+				}
+
+				ImGui::Checkbox("dynamic noise", &m_dynamicNoise);
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("update noise pattern each frame");
 				ImGui::Separator();
 			}
 
-			// Simplified one-liner Combo() API, using values packed in a single constant string
-			ImGui::Combo("noise", &m_noiseType, "none\0dither\0random\0\0");
-			ImGui::Checkbox("dynamic noise", &m_dynamicNoise);
-			ImGui::Separator();
+			{
+				ImGui::Text("temporal denoise pass controls:");
+				ImGui::Checkbox("use temporal pass", &m_useTemporalPass);
+				ImGui::Separator();
+			}
 
-			ImGui::Checkbox("use temporal pass", &m_useTemporalPass);
-			ImGui::SliderInt("spatial passes", &m_denoisePasses, 0, DENOISE_MAX_PASSES);
-			ImGui::Combo("spatial sample extent", &m_spatialSampleType, "three\0five\0\0");
-			ImGui::SliderFloat("sigma z", &m_sigmaDepth, 0.0f, 2.0f);
-			ImGui::SliderFloat("sigma n", &m_sigmaNormal, 1.0f, 256.0f);
-			ImGui::Separator();
+			{
+				ImGui::Text("spatial denoise pass controls:");
+				ImGui::SliderInt("spatial passes", &m_denoisePasses, 0, DENOISE_MAX_PASSES);
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("set passes to 0 to turn off spatial denoise");
 
+				ImGui::Combo("spatial sample extent", &m_spatialSampleType, "three\0five\0\0");
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("select 3x3 or 5x5 filter kernal");
+
+				ImGui::SliderFloat("sigma z", &m_sigmaDepth, 0.0f, 0.1f, "%.5f");
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("lower sigma z, pickier blending across depth edges");
+
+				ImGui::SliderFloat("sigma n", &m_sigmaNormal, 1.0f, 256.0f);
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("higher sigma n, pickier blending across normal edges");
+				ImGui::Separator();
+			}
+
+			if (ImGui::CollapsingHeader("TXAA options"))
+			{
+				ImGui::Checkbox("use TXAA", &m_enableTxaa);
+				ImGui::Checkbox("mitchellFilter", &m_applyMitchellFilter);
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("reduces flicker/crawl on thin features, maybe too much");
+
+				ImGui::Checkbox("debug TXAA with slow frame rate", &m_useTxaaSlow);
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("sleep 100ms per frame to highlight temporal artifacts");
+				ImGui::Separator();
+			}
 
 			ImGui::End();
 
@@ -735,7 +786,10 @@ public:
 			m_currFrame = bgfx::frame();
 
 			// add artificial wait to emphasize txaa behavior
-			//bx::sleep(100);
+			if (m_useTxaaSlow)
+			{
+				bx::sleep(100);
+			}
 
 			return true;
 		}
@@ -972,15 +1026,16 @@ public:
 	int32_t m_size[2];
 
 	// UI parameters
-	bool m_enableTxaa = false;
-	bool m_applyMitchellFilter = true;
 	int32_t m_noiseType = 2;
 	bool m_dynamicNoise = true;
 	bool m_useTemporalPass = true;
 	int32_t m_spatialSampleType = 1;
 	int32_t m_denoisePasses = 5;
-	float m_sigmaDepth = 0.1f;
+	float m_sigmaDepth = 0.05f;
 	float m_sigmaNormal = 128.0f;
+	bool m_enableTxaa = false;
+	bool m_applyMitchellFilter = true;
+	bool m_useTxaaSlow = false;
 };
 
 } // namespace
