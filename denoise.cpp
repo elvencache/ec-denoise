@@ -709,10 +709,9 @@ public:
 
 			{
 				ImGui::TextWrapped(
-					"In this demo, noise is added to results of deferred lighting. Then denoise "
-					"is applied before multiplying the lit result with gbuffer albedo. Optionally, "
-					"temporal antialiasing can be applied after that. (txaa off by default. "
-					"it is rather blurry)");
+					"In this demo, noise is added to results of deferred lighting. Then denoise is applied "
+					"before multiplying the lit result with gbuffer albedo. Optionally, temporal antialiasing "
+					"can be applied after that. (off by default, implementation blurry)");
 				ImGui::Separator();
 
 				ImGui::Text("noise controls:");

@@ -100,6 +100,11 @@ void main()
 	vec3 colorDo = texture2D(s_color, texCoord      + dv).xyz;
 	vec3 colorDR = texture2D(s_color, texCoord + du + dv).xyz;
 
+	// in an ideal world, lighting and such is in linear space,
+	// would possibly want to convert to gamma and apply txaa
+	// there. but this sample isn't storing intermediate results
+	// in linear space (or doing any reasonable lighting) so
+	// would possibly want to do the opposite.
 #if APPLY_TXAA_IN_LINEAR
 	colorCurr = toLinear(colorCurr);
 	colorPrev = toLinear(colorPrev);
@@ -146,30 +151,25 @@ void main()
 
 	float lumaCurr = dot(colorCurr, vec3(0.3, 0.6, 0.1));
 	float lumaPrev = dot(colorPrev, vec3(0.3, 0.6, 0.1));
-	float lumaDiff = abs(lumaCurr-lumaPrev);
-	float lumaSimi = 1.0 - lumaDiff;
-	float lumaSimiSq = lumaSimi*lumaSimi;
-	float feedback = mix(0.7, 0.9, lumaSimiSq);
 
+	// adjust feedback/blend amount depending on color difference
 	float r = abs(lumaCurr-lumaPrev) / max(max(lumaCurr, lumaPrev), 0.2);
 	r = 1.0-r;
 	r = r*r;
-	feedback = mix(0.8, 0.95, r);
+	float feedback = mix(0.8, 0.95, r);
 
 	vec3 colorOut = mix(colorCurr, colorPrev, feedback);
 
-#if 1
-	float b = mix(3.0/2.0, 1.0/3.0, r);
-	float c = mix(-1.0/4.0, 1.0/3.0, r);
-#else
-	float b = 1.0/3.0;//3.0/2.0;//
-	float c = 1.0/3.0;//-1.0/4.0;//
-#endif
+	if (u_applyMitchellFilter > 0.0)
+	{
+		// adjust filter coefficients depending on color difference
+		float b = mix(3.0/2.0, 1.0/3.0, r);
+		float c = mix(-1.0/4.0, 1.0/3.0, r);
 
-	if (u_applyMitchellFilter > 0.0) {
 		float m0 = Mitchell(b, c, 0.0);
 		float m1 = Mitchell(b, c, 1.0);
 		float m2 = Mitchell(b, c, sqrt(2.0));
+
 		vec3 colorFilter = m0 * colorCurr;
 		colorFilter += m1 * colorLe;
 		colorFilter += m1 * colorRi;
@@ -184,6 +184,11 @@ void main()
 		colorOut = mix(colorFilter, colorPrev, feedback);
 	}
 
+	// in an ideal world, lighting and such is in linear space,
+	// would possibly want to convert to gamma and apply txaa
+	// there. but this sample isn't storing intermediate results
+	// in linear space (or doing any reasonable lighting) so
+	// would possibly want to do the opposite.
 #if APPLY_TXAA_IN_LINEAR
 	colorCurr = toGamma(colorOut);
 #else

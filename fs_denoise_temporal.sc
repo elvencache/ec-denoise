@@ -13,7 +13,7 @@ $input v_texcoord0
 SAMPLER2D(s_color,			0);
 SAMPLER2D(s_normal,			1);
 SAMPLER2D(s_velocity,		2);
-SAMPLER2D(s_previousColor,		3); // previous color
+SAMPLER2D(s_previousColor,	3); // previous color
 SAMPLER2D(s_previousNormal,	4); // previous normal
 
 #define COS_PI_OVER_4   0.70710678118
