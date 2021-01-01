@@ -1,7 +1,7 @@
 $input v_texcoord0
 
 /*
-* Copyright 2020 elven cache. All rights reserved.
+* Copyright 2021 elven cache. All rights reserved.
 * License: https://github.com/bkaradzic/bgfx#license-bsd-2-clause
 */
 

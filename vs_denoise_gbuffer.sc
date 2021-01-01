@@ -2,7 +2,7 @@ $input a_position, a_normal, a_texcoord0
 $output v_normal, v_texcoord0, v_texcoord1, v_texcoord2, v_texcoord3
 
 /*
-* Copyright 2020 elven cache. All rights reserved.
+* Copyright 2021 elven cache. All rights reserved.
 * License: https://github.com/bkaradzic/bgfx#license-bsd-2-clause
 */
 
