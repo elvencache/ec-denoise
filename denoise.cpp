@@ -3,6 +3,52 @@
 * License: https://github.com/bkaradzic/bgfx#license-bsd-2-clause
 */
 
+/*
+* Implement SVGF style denoising as bgfx example. Goal is to explore various
+* options and parameters, not produce an optimized, efficient denoiser.
+*
+* Starts with deferred rendering scene with very basic lighting. Lighting is
+* masked out with a noise pattern to provide something to denoise. There are
+* two options for the noise pattern. One is a fixed 2x2 dither pattern to
+* stand-in for lighting at quarter resolution. The other is the common
+* shadertoy random pattern as a stand-in for some fancier lighting without
+* enough samples per pixel, like ray tracing.
+*
+* First a temporal denoising filter is applied. The temporal filter is only
+* using normals to reject previous samples. The SVGF paper also describes using
+* depth comparison to reject samples but that is not implemented here.
+*
+* Followed by some number of spatial filters. These are implemented like in the
+* SVGF paper. As an alternative to the 5x5 Edge-Avoiding A-Trous filter, can
+* select a 3x3 filter instead. The 3x3 filter takes fewer samples and covers a
+* smaller area, but takes less time to compute. From a loosely eyeballed
+* comparison, N 5x5 passes looks similar to N+1 3x3 passes. The wider spatial
+* filters take a fair chunk of time to compute. I wonder if it would be a good
+* idea to interleave the input texture before computing, after the first pass
+* which skips zero pixels.
+*
+* I have not implemetened the variance guided part.
+*
+* There's also an optional TXAA pass to be applied after. I am not happy with
+* its implementation yet, so it defaults to off here.
+*/
+
+/*
+* References:
+* Spatiotemporal Variance-Guided Filtering: Real-Time Reconstruction for
+*	Path-Traced Global Illumination. by Christoph Schied and more.
+*	- SVGF denoising algorithm
+*
+* Streaming G-Buffer Compression for Multi-Sample Anti-Aliasing.
+*	by E. Kerzner and M. Salvi.
+*	- details about history comparison for temporal denoising filter
+*
+* Edge-Avoiding À-Trous Wavelet Transform for Fast Global Illumination
+*	Filtering. by Holger Dammertz and more.
+*	- details about a-trous algorithm for spatial denoising filter
+*/
+
+
 #include <common.h>
 #include <camera.h>
 #include <bgfx_utils.h>
@@ -65,7 +111,7 @@ bgfx::VertexLayout PosTexCoord0Vertex::ms_layout;
 
 struct Uniforms
 {
-	enum { NumVec4 = 16 };
+	enum { NumVec4 = 13 };
 
 	void init() {
 		u_params = bgfx::createUniform("u_params", bgfx::UniformType::Vec4, NumVec4);
@@ -83,16 +129,13 @@ struct Uniforms
 	{
 		struct
 		{
-			/*  0    */ struct { float m_viewportPixelSize[2]; float m_halfViewportPixelSize[2]; };
-			/*  1    */ struct { float m_depthUnpackConsts[2]; float m_unused1[2]; };
-			/*  2    */ struct { float m_ndcToViewMul[2]; float m_ndcToViewAdd[2]; };
-			/*  3    */ struct { float m_cameraJitterCurr[2]; float m_cameraJitterPrev[2]; };
-			/*  4    */ struct { float m_feedbackMin; float m_feedbackMax; float m_unused4[2]; };
-			/*  5    */ struct { float m_unused5; float m_applyMitchellFilter; float m_options[2]; };
-			/*  6-9  */ struct { float m_worldToViewPrev[16]; };
-			/* 10-13 */ struct { float m_viewToProjPrev[16]; };
-			/* 14    */ struct { float m_frameOffsetForNoise; float m_noiseType; float m_unused14[2]; };
-			/* 15    */ struct { float m_denoiseStep; float m_sigmaDepth; float m_sigmaNormal; float m_unused15; };
+			/*  0    */ struct { float m_cameraJitterCurr[2]; float m_cameraJitterPrev[2]; };
+			/*  1    */ struct { float m_feedbackMin; float m_feedbackMax; float m_unused1[2]; };
+			/*  2    */ struct { float m_unused2; float m_applyMitchellFilter; float m_options[2]; };
+			/*  3-6  */ struct { float m_worldToViewPrev[16]; };
+			/*  7-10 */ struct { float m_viewToProjPrev[16]; };
+			/* 11    */ struct { float m_frameOffsetForNoise; float m_noiseType; float m_unused11[2]; };
+			/* 12    */ struct { float m_denoiseStep; float m_sigmaDepth; float m_sigmaNormal; float m_unused12; };
 		};
 
 		float m_params[NumVec4 * 4];
@@ -448,7 +491,6 @@ public:
 
 			// update last texture written, to chain passes together
 			bgfx::TextureHandle lastTex = m_currentColor.m_texture;
-			
 
 			// denoise temporal pass
 			if (m_useTemporalPass && m_havePrevious)
@@ -697,7 +739,7 @@ public:
 				, ImGuiCond_FirstUseEver
 				);
 			ImGui::SetNextWindowSize(
-				ImVec2(m_width / 4.0f, m_height / 1.36f)
+				ImVec2(m_width / 4.0f, m_height / 1.24f)
 				, ImGuiCond_FirstUseEver
 				);
 			ImGui::Begin("Settings"
@@ -766,13 +808,26 @@ public:
 			if (ImGui::CollapsingHeader("TXAA options"))
 			{
 				ImGui::Checkbox("use TXAA", &m_enableTxaa);
-				ImGui::Checkbox("mitchellFilter", &m_applyMitchellFilter);
+				ImGui::Checkbox("apply extra blur to current color", &m_applyMitchellFilter);
 				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("reduces flicker/crawl on thin features, maybe too much");
+					ImGui::SetTooltip("reduces flicker/crawl on thin features, maybe too much!");
+
+				ImGui::SliderFloat("feedback min", &m_feedbackMin, 0.0f, 1.0f);
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("minimum amount of previous frame to blend in");
+
+				ImGui::SliderFloat("feedback max", &m_feedbackMax, 0.0f, 1.0f);
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("maximum amount of previous frame to blend in");
 
 				ImGui::Checkbox("debug TXAA with slow frame rate", &m_useTxaaSlow);
 				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("sleep 100ms per frame to highlight temporal artifacts");
+				{
+					ImGui::BeginTooltip();
+					ImGui::Text("sleep 100ms per frame to highlight temporal artifacts");
+					ImGui::Text("high framerate compensates for flickering, masking issues");
+					ImGui::EndTooltip();
+				}
 				ImGui::Separator();
 			}
 
@@ -892,32 +947,6 @@ public:
 
 	void updateUniforms()
 	{
-		vec2Set(m_uniforms.m_viewportPixelSize, 1.0f / float(m_size[0]), 1.0f / float(m_size[1]));
-
-		float depthLinearizeMul = -m_proj2[3*4+2]; // float depthLinearizeMul = ( clipFar * clipNear ) / ( clipFar - clipNear );
-		float depthLinearizeAdd =  m_proj2[2*4+2]; // float dpethLinearizeAdd = clipFar / ( clipFar - clipNear );
-												   // "correct the handedness issue. need to make sure this below is correct, but I think it is."
-		if (depthLinearizeMul * depthLinearizeAdd < 0)
-		{
-			depthLinearizeAdd = -depthLinearizeAdd;
-		}
-
-		vec2Set(m_uniforms.m_depthUnpackConsts, depthLinearizeMul, depthLinearizeAdd);
-
-		float tanHalfFOVY = 1.0f / m_proj2[1*4+1];	// tanf( drawContext.Camera.GetYFOV() * 0.5f );
-		float tanHalfFOVX = 1.0f / m_proj2[0];		// tanHalfFOVY * drawContext.Camera.GetAspect();
-
-		if (bgfx::getRendererType() == bgfx::RendererType::OpenGL)
-		{
-			vec2Set(m_uniforms.m_ndcToViewMul, tanHalfFOVX * 2.0f, tanHalfFOVY * 2.0f);
-			vec2Set(m_uniforms.m_ndcToViewAdd, tanHalfFOVX * -1.0f, tanHalfFOVY * -1.0f);
-		}
-		else
-		{
-			vec2Set(m_uniforms.m_ndcToViewMul, tanHalfFOVX * 2.0f, tanHalfFOVY * -2.0f);
-			vec2Set(m_uniforms.m_ndcToViewAdd, tanHalfFOVX * -1.0f, tanHalfFOVY * 1.0f);
-		}
-
 		{
 			uint32_t idx = m_currFrame % 8;
 			const float offsets[] = {
@@ -945,6 +974,8 @@ public:
 			m_jitter[1] = jitterY;
 		}
 
+		m_uniforms.m_feedbackMin = m_feedbackMin;
+		m_uniforms.m_feedbackMax = m_feedbackMax;
 		m_uniforms.m_applyMitchellFilter = m_applyMitchellFilter ? 1.0f : 0.0f;
 
 		mat4Set(m_uniforms.m_worldToViewPrev, m_worldToViewPrev);
@@ -1033,6 +1064,8 @@ public:
 	float m_sigmaDepth = 0.05f;
 	float m_sigmaNormal = 128.0f;
 	bool m_enableTxaa = false;
+	float m_feedbackMin = 0.8f;
+	float m_feedbackMax = 0.95f;
 	bool m_applyMitchellFilter = true;
 	bool m_useTxaaSlow = false;
 };

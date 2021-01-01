@@ -156,10 +156,14 @@ void main()
 	float r = abs(lumaCurr-lumaPrev) / max(max(lumaCurr, lumaPrev), 0.2);
 	r = 1.0-r;
 	r = r*r;
-	float feedback = mix(0.8, 0.95, r);
+	float feedback = mix(u_feedbackMin, u_feedbackMax, r);
 
 	vec3 colorOut = mix(colorCurr, colorPrev, feedback);
 
+	// optionally blur current color, since we've already taken
+	// the samples to build the variance window. could use more
+	// blur when feedback is lower, to replace temporal accumulation
+	// with spatial accumulation. or could use filter to sharpen.
 	if (u_applyMitchellFilter > 0.0)
 	{
 		// adjust filter coefficients depending on color difference
